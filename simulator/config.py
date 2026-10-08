@@ -14,6 +14,7 @@ class Config:
 
     # Fleet sizing
     EXTRA_SERVERS = int(os.environ.get('EXTRA_SERVERS', 12))
-    VULN_COUNT = int(os.environ.get('VULN_COUNT', 40))
+    # 0 = whole catalog
+    VULN_COUNT = int(os.environ.get('VULN_COUNT', 0))
 
     DEFAULT_PAGE_SIZE = int(os.environ.get('DEFAULT_PAGE_SIZE', 10))

@@ -137,6 +137,13 @@ EXTRA_OS = {
         'architecture': 'AMD64', 'version': '10.0',
         'cpe': {'v2.3': 'cpe:2.3:o:microsoft:windows_server_2022:-:*:*:*:*:*:*:*', 'part': 'o'},
     },
+    'PAN-OS 10.2': {
+        'description': 'Palo Alto Networks PAN-OS 10.2', 'family': 'PAN-OS',
+        'vendor': 'Palo Alto Networks', 'product': 'PAN-OS',
+        'systemName': 'Palo Alto Networks PAN-OS', 'type': 'Firewall',
+        'architecture': 'x86_64', 'version': '10.2',
+        'cpe': {'v2.3': 'cpe:2.3:o:paloaltonetworks:pan-os:10.2:*:*:*:*:*:*:*', 'part': 'o'},
+    },
 }
 
 

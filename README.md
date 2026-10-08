@@ -92,8 +92,22 @@ Le search DSL supporte : `host-name`, `ip-address`, `os`, `site-id`, `risk-score
 
 ## Dataset
 
-- **40 vulnérabilités** réelles (Log4Shell, ProxyLogon, PrintNightmare, Zerologon, MOVEit, Follina, Spring4Shell, EternalBlue, BlueKeep, PAN-OS 2024, regreSSHion, etc.) avec CVSS v2/v3, score PCI, catégories, exploits, malware kits
+- **49 vulnérabilités** réelles (Log4Shell, ProxyLogon, PrintNightmare, Zerologon, MOVEit, Follina, Spring4Shell, EternalBlue, BlueKeep, PAN-OS 2024, regreSSHion, WebKit, libwebp, Looney Tunables, etc.) avec CVSS v2/v3, score PCI, catégories, exploits, malware kits
 - **~18 assets** : 6 personas Business Corp (Alice, Bob, Charlie, David, Emma, Flora) + 12 serveurs générés (web, db, mail, AD, VPN, monitoring, CI, cloud)
+- **Affectation cohérente des CVE** : chaque asset ne reçoit que des CVE applicables à son OS et à ses logiciels (pas d'Exchange sur un Mac, pas de PAN-OS sur une Debian)
+
+### Cohérence CVE / asset
+
+Chaque asset a un ensemble de tags :
+
+- **plateforme**, déduite de l'OS : `windows-client` (+ `office`, `browser`), `windows-server`, `macos` (+ `browser`), `ios`, `linux`, `panos`
+- **rôles**, déclarés par hostname dans `ASSET_ROLES` (`generators/assets.py`) : `exchange`, `domain-controller`, `java`, `web`, `php`, `teamcity`, `activemq`, `mft`, `postgresql`, `grafana`, `smtp`
+
+Chaque CVE déclare dans `CVE_REQUIREMENTS` (`generators/vulnerabilities.py`) les combinaisons de tags qu'elle exige, par exemple ProxyLogon `[{'exchange'}]`, Spring4Shell `[{'java', 'web'}]`, WebKit `[{'macos'}, {'ios'}]`. Le tirage aléatoire (déterministe) ne pioche que dans les CVE compatibles.
+
+Les CVE d'équipements absents du parc par défaut (Citrix, F5, FortiOS, Cisco IOS XE, Confluence, MOVEit, ScreenConnect, BlueKeep / EternalBlue sur Windows ancien) restent au catalogue mais ne sont jamais tirées : il suffit d'ajouter un asset avec le rôle correspondant (`citrix`, `f5`, `windows-legacy`...) pour qu'elles apparaissent.
+
+`VULN_COUNT` (défaut `0` = tout le catalogue) limite le catalogue aux N premières entrées.
 - **5 sites** : HQ Paris, DR Site, Cloud Ops, Dev Lab, Remote Workers
 - **4 scan engines** dont Rapid7 Cloud Engine
 - **8 scans historiques** + start/pause/resume/stop stateful
@@ -183,7 +197,7 @@ Rapid7InsightVM-simul/
     ├── requirements.txt
     ├── generators/
     │   ├── base.py           # personas + OS fingerprints + page envelope
-    │   ├── vulnerabilities.py # 40 vulnérabilités réelles (Log4Shell, ProxyLogon, ...)
+    │   ├── vulnerabilities.py # 49 vulnérabilités réelles + CVE_REQUIREMENTS (applicabilité)
     │   ├── assets.py         # 18 assets (6 personas + 12 serveurs)
     │   ├── sites.py          # 5 sites
     │   ├── scans.py          # 8 scans historiques + ScanStore live

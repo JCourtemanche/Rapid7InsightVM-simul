@@ -134,7 +134,106 @@ VULN_CATALOG_SEED = [
     ('CVE-2024-21413', 'Microsoft Outlook Remote Code Execution',
      'Microsoft Outlook RCE via crafted moniker links (MonikerLink).',
      'Critical', 9.8, ['Microsoft', 'Outlook'], 3, 1),
+    ('CVE-2024-0012', 'Palo Alto Networks PAN-OS Management Interface Authentication Bypass',
+     'Authentication bypass in the PAN-OS management web interface allowing an unauthenticated attacker to gain administrator privileges.',
+     'Critical', 9.3, ['Network', 'Firewall'], 5, 1),
+    ('CVE-2023-41064', 'Apple ImageIO Buffer Overflow (BLASTPASS)',
+     'Buffer overflow in ImageIO allowing arbitrary code execution via a maliciously crafted image.',
+     'Severe', 7.8, ['Apple', 'ImageIO'], 3, 1),
+    ('CVE-2023-41993', 'Apple WebKit Arbitrary Code Execution',
+     'Processing maliciously crafted web content may lead to arbitrary code execution.',
+     'Critical', 9.8, ['Apple', 'WebKit'], 3, 0),
+    ('CVE-2024-23222', 'Apple WebKit Type Confusion',
+     'Type confusion in WebKit allowing arbitrary code execution via crafted web content.',
+     'Severe', 8.8, ['Apple', 'WebKit'], 2, 0),
+    ('CVE-2023-4863', 'Google Chrome libwebp Heap Buffer Overflow',
+     'Heap buffer overflow in libwebp allowing an out-of-bounds memory write via a crafted HTML page.',
+     'Severe', 8.8, ['Google', 'Chrome'], 6, 1),
+    ('CVE-2023-4911', 'GNU C Library Dynamic Loader Buffer Overflow (Looney Tunables)',
+     'Buffer overflow in the glibc dynamic loader when processing GLIBC_TUNABLES, allowing local privilege escalation.',
+     'Severe', 7.8, ['Linux', 'glibc'], 5, 1),
+    ('CVE-2024-10979', 'PostgreSQL PL/Perl Environment Variable Manipulation',
+     'Incorrect control of environment variables in PostgreSQL PL/Perl allowing arbitrary code execution.',
+     'Severe', 8.8, ['PostgreSQL', 'Database'], 1, 0),
+    ('CVE-2021-43798', 'Grafana Directory Traversal',
+     'Directory traversal in Grafana plugin URLs allowing unauthenticated access to local files.',
+     'Severe', 7.5, ['Grafana', 'Web'], 9, 2),
+    ('CVE-2023-51764', 'Postfix SMTP Smuggling',
+     'Postfix allows SMTP smuggling, enabling spoofed emails that pass SPF checks.',
+     'Moderate', 5.3, ['Postfix', 'SMTP'], 2, 0),
 ]
+
+
+# Which assets a CVE can realistically affect. Each entry is a list of alternatives;
+# an asset is compatible when ALL tags of at least one alternative are in its platform
+# set (see assets.asset_platforms). CVEs absent from this map are never sampled.
+#
+# Platform tags (from the OS): windows-client, windows-server, macos, ios, linux, panos
+# Role tags (from the software): office, browser, java, web, php, exchange,
+# domain-controller, teamcity, activemq, mft, postgresql, grafana, smtp
+# Product tags with no asset in the default fleet (orphan CVEs, kept for pinning):
+# citrix, f5, fortios, cisco-ios, confluence, moveit, screenconnect, windows-legacy
+CVE_REQUIREMENTS = {
+    'CVE-2021-44228': [{'java'}],
+    'CVE-2024-3400': [{'panos'}],
+    'CVE-2024-0012': [{'panos'}],
+    'CVE-2024-1709': [{'screenconnect'}],
+    'CVE-2023-46604': [{'activemq'}],
+    'CVE-2023-4966': [{'citrix'}],
+    'CVE-2023-36884': [{'windows-client', 'office'}],
+    'CVE-2023-23397': [{'windows-client', 'office'}],
+    'CVE-2023-38831': [{'windows-client'}],
+    'CVE-2023-20198': [{'cisco-ios'}],
+    'CVE-2023-34362': [{'moveit'}],
+    'CVE-2022-30190': [{'windows-client'}, {'windows-server'}],
+    'CVE-2022-22965': [{'java', 'web'}],
+    'CVE-2022-26134': [{'confluence'}],
+    'CVE-2021-34527': [{'windows-client'}, {'windows-server'}],
+    'CVE-2021-26855': [{'exchange'}],
+    'CVE-2020-1472': [{'domain-controller'}],
+    'CVE-2019-19781': [{'citrix'}],
+    'CVE-2019-0708': [{'windows-legacy'}],
+    'CVE-2017-0144': [{'windows-legacy'}],
+    'CVE-2024-6387': [{'linux'}],
+    'CVE-2024-38063': [{'windows-client'}, {'windows-server'}],
+    'CVE-2023-50164': [{'java', 'web'}],
+    'CVE-2024-27198': [{'teamcity'}],
+    'CVE-2024-23917': [{'teamcity'}],
+    'CVE-2023-6875': [{'php', 'web'}],
+    'CVE-2024-21762': [{'fortios'}],
+    'CVE-2023-42917': [{'macos'}, {'ios'}],
+    'CVE-2016-3189': [{'linux'}],
+    'CVE-2018-11776': [{'java', 'web'}],
+    'CVE-2022-1388': [{'f5'}],
+    'CVE-2023-46747': [{'f5'}],
+    'CVE-2024-4577': [{'windows-server', 'php'}],
+    'CVE-2024-30078': [{'windows-client'}],
+    'CVE-2024-26169': [{'windows-client'}, {'windows-server'}],
+    'CVE-2023-24880': [{'windows-client'}],
+    'CVE-2022-41040': [{'exchange'}],
+    'CVE-2022-41082': [{'exchange'}],
+    'CVE-2023-3519': [{'citrix'}],
+    'CVE-2024-0204': [{'mft'}],
+    'CVE-2024-21413': [{'windows-client', 'office'}],
+    'CVE-2023-41064': [{'macos'}, {'ios'}],
+    'CVE-2023-41993': [{'macos'}, {'ios'}],
+    'CVE-2024-23222': [{'macos'}, {'ios'}],
+    'CVE-2023-4863': [{'browser'}],
+    'CVE-2023-4911': [{'linux'}],
+    'CVE-2024-10979': [{'postgresql'}],
+    'CVE-2021-43798': [{'grafana'}],
+    'CVE-2023-51764': [{'smtp'}],
+}
+
+
+def is_compatible(vuln, platforms):
+    """True when the vulnerability can realistically affect an asset with these platform tags."""
+    cve = vuln['cves'][0] if vuln.get('cves') else None
+    return any(alt <= platforms for alt in CVE_REQUIREMENTS.get(cve, []))
+
+
+def compatible_vulns(vulns_pool, platforms):
+    return [v for v in vulns_pool if is_compatible(v, platforms)]
 
 
 def _vuln_id(cve_code, product):
@@ -182,10 +281,10 @@ def _risk(cvss3, exploits, mkits):
     return round(cvss3 * 100 + exploits * 25 + mkits * 50, 2)
 
 
-def build_vulnerability_catalog(count=40):
+def build_vulnerability_catalog(count=None):
     catalog = []
     r = random.Random(1337)
-    seed = VULN_CATALOG_SEED[:count]
+    seed = VULN_CATALOG_SEED[:count] if count else VULN_CATALOG_SEED
     for idx, (cve, title, desc, sev, cvss3, cats, exploits, mkits) in enumerate(seed):
         published = past_date(min_days=30, max_days=1500)
         added = published + timedelta(days=r.randint(1, 30))

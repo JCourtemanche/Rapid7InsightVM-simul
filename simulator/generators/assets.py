@@ -14,6 +14,23 @@ from .base import (
     os_summary,
     past_date,
 )
+from .vulnerabilities import compatible_vulns
+
+
+# Software roles per hostname, on top of the platform derived from the OS. They decide
+# which catalog CVEs an asset can realistically carry (see CVE_REQUIREMENTS).
+# Hosts not listed here only get their OS platform (windows-server, linux, ...).
+ASSET_ROLES = {
+    'srv-web-01.business.org':     ['java', 'web'],
+    'srv-web-02.business.org':     ['web', 'php'],
+    'srv-db-01.business.org':      ['postgresql'],
+    'srv-db-02.business.org':      ['postgresql'],
+    'srv-mail.business.org':       ['exchange'],
+    'srv-ad-01.business.org':      ['domain-controller'],
+    'srv-monitoring.business.org': ['grafana'],
+    'srv-ci.business.org':         ['java', 'teamcity'],
+    'cloud-app-01.business.org':   ['java', 'activemq'],
+}
 
 
 EXTRA_SERVER_SEED = [
@@ -54,6 +71,25 @@ def _vuln_counts(vulns):
     }
 
 
+def asset_platforms(hostname, os_fp):
+    """Platform + role tags used to pick CVEs compatible with this asset."""
+    family = (os_fp.get('family') or '').lower()
+    if family == 'windows':
+        if (os_fp.get('type') or '').lower() == 'server':
+            tags = {'windows-server'}
+        else:
+            tags = {'windows-client', 'office', 'browser'}
+    elif family == 'macos':
+        tags = {'macos', 'browser'}
+    elif family == 'ios':
+        tags = {'ios'}
+    elif family == 'pan-os':
+        tags = {'panos'}
+    else:
+        tags = {'linux'}
+    return tags | set(ASSET_ROLES.get((hostname or '').lower(), []))
+
+
 def _pick_services(r, os_fp):
     """Pick a small subset of services based on OS type."""
     fam = os_fp.get('family', '').lower()
@@ -61,6 +97,8 @@ def _pick_services(r, os_fp):
         candidates = ['SMB', 'RDP', 'HTTPS', 'HTTP']
     elif fam == 'linux':
         candidates = ['SSH', 'HTTP', 'HTTPS', 'PostgreSQL']
+    elif fam == 'pan-os':
+        candidates = ['HTTPS']
     else:
         candidates = ['SSH', 'HTTPS']
     picked = r.sample(candidates, k=min(len(candidates), r.randint(1, 3)))
@@ -75,7 +113,8 @@ def _persona_assets(vulns_pool, r):
     assets = []
     for idx, persona in enumerate(USERS):
         fp = os_for_persona(persona)
-        vulns = r.sample(vulns_pool, k=r.randint(4, 12))
+        pool = compatible_vulns(vulns_pool, asset_platforms(persona['hostname'], fp))
+        vulns = r.sample(pool, k=min(len(pool), r.randint(4, 12)))
         last_scan = past_date(min_days=0, max_days=3)
         site_id = 5 if persona.get('machine_type') in ('laptop', 'mobile') else 1
         assets.append({
@@ -116,7 +155,8 @@ def _extra_assets(vulns_pool, r, count):
     seed = EXTRA_SERVER_SEED[:count]
     for idx, (hostname, ip, os_name, site_id) in enumerate(seed):
         fp = EXTRA_OS.get(os_name) or EXTRA_OS['Ubuntu 22.04 LTS']
-        vulns = r.sample(vulns_pool, k=r.randint(8, 20))
+        pool = compatible_vulns(vulns_pool, asset_platforms(hostname, fp))
+        vulns = r.sample(pool, k=min(len(pool), r.randint(8, 20)))
         last_scan = past_date(min_days=0, max_days=5)
         asset_id = 200 + idx
         assets.append({
