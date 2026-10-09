@@ -7,7 +7,17 @@ Report endpoints.
   GET  /api/3/reports/<id>/history/<inst>/output   - download the report:
         * format=sql-query        -> CSV (data warehouse style, used by fetch-assets)
         * anything else           -> a tiny placeholder PDF
+
+Stateless by design: gunicorn runs several workers (and Cloud Run several instances),
+and the XSIAM collector creates the asset and vulnerability reports concurrently, so
+create / generate / history / output for one report often land on different processes.
+The report kind (pdf / asset CSV / vulnerability CSV) is therefore encoded in the last
+digit of the report id, and every route answers from the id alone. `_REPORTS` is only a
+best-effort per-process cache for the list / get routes.
 """
+import itertools
+import os
+
 from flask import Blueprint, Response, jsonify, request
 
 from auth import require_basic_auth
@@ -34,8 +44,32 @@ TEMPLATES = [
 
 
 _REPORTS: dict[int, dict] = {}
-_NEXT_ID = 1000
-_NEXT_INSTANCE = 5000
+
+# Last digit of a report id = report kind (see module docstring)
+_KIND_PDF, _KIND_ASSET, _KIND_VULN = 0, 1, 2
+# Per-process sequence, offset by pid so concurrent workers rarely hand out the same id
+_SEQ = itertools.count(1000 + (os.getpid() % 97) * 10000)
+
+
+def _new_report_id(fmt, query_type):
+    if fmt != 'sql-query':
+        kind = _KIND_PDF
+    else:
+        kind = _KIND_VULN if query_type == 'vulnerability' else _KIND_ASSET
+    return next(_SEQ) * 10 + kind
+
+
+def _report_kind(report_id):
+    return report_id % 10
+
+
+def _instance(report_id):
+    return {
+        'id': report_id * 10 + 1,
+        'status': 'complete',
+        'generated': iso_z(),
+        'size': {'bytes': 12345, 'formatted': '12.06 KB'},
+    }
 
 
 @reports_bp.route('/report_templates', methods=['GET'])
@@ -52,12 +86,11 @@ def create_report():
     The client MUST see a `Location: /api/3/reports/<id>` header on the 201
     response - the integration extracts the id by splitting the URL on '/'.
     """
-    global _NEXT_ID
     body = request.get_json(silent=True) or {}
-    _NEXT_ID += 1
-    report_id = _NEXT_ID
     fmt = body.get('format') or 'pdf'
     query = body.get('query') or ''
+    query_type = detect_query_type(query) if fmt == 'sql-query' else None
+    report_id = _new_report_id(fmt, query_type)
     report = {
         'id': report_id,
         'name': body.get('name') or f'Report {report_id}',
@@ -65,7 +98,7 @@ def create_report():
         'template': body.get('template') or 'audit-report',
         'scope': body.get('scope') or {},
         'query': query,
-        'query_type': detect_query_type(query) if fmt == 'sql-query' else None,
+        'query_type': query_type,
         'version': body.get('version') or '2.3.0',
         'created': iso_z(),
         'history': [],
@@ -86,48 +119,27 @@ def create_report():
 @reports_bp.route('/reports/<int:report_id>/generate', methods=['POST'])
 @require_basic_auth
 def generate_report(report_id):
-    global _NEXT_INSTANCE
+    instance = _instance(report_id)
     report = _REPORTS.get(report_id)
-    if report is None:
-        return jsonify({'status': 404, 'message': f'Report {report_id} not found'}), 404
-    _NEXT_INSTANCE += 1
-    instance = {
-        'id': _NEXT_INSTANCE,
-        'status': 'complete',
-        'generated': iso_z(),
-        'size': {'bytes': 12345, 'formatted': '12.06 KB'},
-    }
-    report['history'].append(instance)
-    return jsonify({'id': _NEXT_INSTANCE}), 202
+    if report is not None:
+        report['history'].append(instance)
+    return jsonify({'id': instance['id']}), 202
 
 
 @reports_bp.route('/reports/<int:report_id>/history/<int:instance_id>', methods=['GET'])
 @require_basic_auth
 def report_history(report_id, instance_id):
-    report = _REPORTS.get(report_id)
-    if report is None:
-        return jsonify({'status': 404, 'message': f'Report {report_id} not found'}), 404
-    inst = next((h for h in report['history'] if h['id'] == instance_id), None)
-    if inst is None:
-        inst = {
-            'id': instance_id,
-            'status': 'complete',
-            'generated': iso_z(),
-            'size': {'bytes': 12345, 'formatted': '12.06 KB'},
-        }
-    return jsonify(inst), 200
+    # Reports are generated synchronously: any instance of any report is complete
+    return jsonify({**_instance(report_id), 'id': instance_id}), 200
 
 
 @reports_bp.route('/reports/<int:report_id>/history/<int:instance_id>/output', methods=['GET'])
 @require_basic_auth
 def report_output(report_id, instance_id):
-    report = _REPORTS.get(report_id)
-    fmt = (report or {}).get('format') or 'pdf'
-
-    if fmt == 'sql-query':
+    kind = _report_kind(report_id)
+    if kind in (_KIND_ASSET, _KIND_VULN):
         # Data-warehouse style output used by fetch-assets.
-        qtype = (report or {}).get('query_type') or 'asset'
-        payload = render_vulnerability_csv() if qtype == 'vulnerability' else render_asset_csv()
+        payload = render_vulnerability_csv() if kind == _KIND_VULN else render_asset_csv()
         return Response(payload, status=200, mimetype='text/csv')
 
     # Any other format -> return a tiny placeholder PDF.
